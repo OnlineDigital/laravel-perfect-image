@@ -13,18 +13,23 @@ Automatic responsive image optimization for Laravel. Detects rendered image dime
 ## Installation
 
 ```bash
-composer require andreitelteu/laravel-perfect-image
+composer require OnlineDigital/laravel-perfect-image
 ```
 
 ### Add Middleware (Optional - for automatic JS injection)
 
-Add to your `app/Http/Kernel.php`:
+Add to your `bootstrap/app.php`:
 
 ```php
-protected $middlewareAliases = [
-    // ...
-    'perfect-image' => \OnlineDigital\PerfectImage\Http\Middleware\InjectPerfectImageJs::class,
-];
+use Illuminate\Foundation\Configuration\Middleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'perfect-image' => \OnlineDigital\PerfectImage\Http\Middleware\InjectPerfectImageJs::class,
+        ]);
+    })
+    ->create();
 ```
 
 Or apply to specific routes:
@@ -36,7 +41,7 @@ Route::get('/home', [HomeController::class, 'index'])->middleware('perfect-image
 ### Publish Config
 
 ```bash
-php artisan vendor:publish --provider="AndreiTelteu\\PerfectImage\\PerfectImageServiceProvider" --tag="perfect-image-config"
+php artisan vendor:publish --provider="OnlineDigital\\PerfectImage\\PerfectImageServiceProvider" --tag="perfect-image-config"
 ```
 
 ### Config Options
