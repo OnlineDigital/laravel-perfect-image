@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static array getResolutions(string $id)
  * @method static void saveResolutions(string $id, array $resolutions)
  * @method static string getJavaScript()
+ * @method static void setCspNonce(?string $nonce)
+ * @method static ?string getCspNonce()
  *
  * @see \OnlineDigital\PerfectImage\ImageManager
  */

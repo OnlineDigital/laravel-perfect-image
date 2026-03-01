@@ -13,7 +13,7 @@ Automatic responsive image optimization for Laravel. Detects rendered image dime
 ## Installation
 
 ```bash
-composer require OnlineDigital/laravel-perfect-image
+composer require onlinedigital/laravel-perfect-image
 ```
 
 ### Add Middleware (Optional - for automatic JS injection)

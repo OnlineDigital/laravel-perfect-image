@@ -11,12 +11,23 @@ class ImageManager
     protected Driver $driver;
     protected int $maxResolutions;
     protected int $minWidthDiff;
+    protected ?string $cspNonce = null;
 
     public function __construct(Driver $driver, int $maxResolutions = 5, int $minWidthDiff = 50)
     {
         $this->driver = $driver;
         $this->maxResolutions = $maxResolutions;
         $this->minWidthDiff = $minWidthDiff;
+    }
+
+    public function setCspNonce(?string $nonce): void
+    {
+        $this->cspNonce = $nonce ?: null;
+    }
+
+    public function getCspNonce(): ?string
+    {
+        return $this->cspNonce;
     }
 
     /**

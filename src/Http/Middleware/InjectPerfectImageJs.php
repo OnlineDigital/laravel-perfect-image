@@ -18,7 +18,9 @@ class InjectPerfectImageJs
         }
         
         $js = \OnlineDigital\PerfectImage\ImageManager::getJavaScript();
-        $script = '<script>' . $js . '</script>';
+        $nonce = app(\OnlineDigital\PerfectImage\ImageManager::class)->getCspNonce();
+        $nonceAttribute = $nonce ? ' nonce="' . htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8') . '"' : '';
+        $script = '<script' . $nonceAttribute . '>' . $js . '</script>';
         
         // Inject before </body>
         $content = $response->getContent();
