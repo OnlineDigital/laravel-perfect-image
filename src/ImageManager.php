@@ -125,8 +125,7 @@ class ImageManager
         $minWidth = 300;
         $maxWidth = 1800;
         
-        $widths = [];
-        $ratios = [];
+        $observed = [];
         foreach (array_merge($existing, $newResolutions) as $resolution) {
             $width = $resolution[0] ?? null;
             $height = $resolution[1] ?? null;
@@ -136,18 +135,20 @@ class ImageManager
             if ($width < $minWidth || $width > $maxWidth) {
                 continue;
             }
-            $widths[] = $width;
-            $ratios[] = $height / $width;
+            $ratio = $height / $width;
+            if ($ratio <= 0) {
+                continue;
+            }
+            $observed[] = ['width' => $width, 'ratio' => $ratio];
         }
 
-        if (empty($widths)) {
+        if (empty($observed)) {
             return;
         }
 
-        sort($widths);
-        sort($ratios);
-        $minObserved = $widths[0];
-        $maxObserved = $widths[count($widths) - 1];
+        usort($observed, fn($a, $b) => $a['width'] <=> $b['width']);
+        $minObserved = $observed[0]['width'];
+        $maxObserved = $observed[count($observed) - 1]['width'];
         $minObserved = max($minWidth, $minObserved);
         $maxObserved = min($maxWidth, $maxObserved);
 
@@ -155,15 +156,21 @@ class ImageManager
             return;
         }
 
-        $ratioIndex = (int) floor((count($ratios) - 1) / 2);
-        $ratio = $ratios[$ratioIndex];
-        if ($ratio <= 0) {
-            return;
-        }
-
         $final = [];
         for ($w = $minObserved; $w <= $maxObserved; $w += $this->minWidthDiff) {
-            $h = (int) round($w * $ratio);
+            $closest = null;
+            $closestDiff = null;
+            foreach ($observed as $obs) {
+                $diff = abs($obs['width'] - $w);
+                if ($closest === null || $diff < $closestDiff) {
+                    $closest = $obs;
+                    $closestDiff = $diff;
+                }
+            }
+            if ($closest === null) {
+                continue;
+            }
+            $h = (int) round($w * $closest['ratio']);
             if ($h <= 0) {
                 continue;
             }
@@ -243,12 +250,14 @@ class ImageManager
         },
         
         observeResize: function() {
+            const throttleMs = 200;
+            let lastRun = 0;
             window.addEventListener('resize', () => {
-                clearTimeout(this.debounceTimer);
-                this.debounceTimer = setTimeout(() => {
-                    this.observePageLoad();
-                    this.collectAllDimensions();
-                }, 300);
+                const now = Date.now();
+                if (now - lastRun < throttleMs) return;
+                lastRun = now;
+                this.observePageLoad();
+                this.collectAllDimensions();
             });
         },
         
