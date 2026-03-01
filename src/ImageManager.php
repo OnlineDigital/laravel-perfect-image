@@ -122,32 +122,53 @@ class ImageManager
         }
         
         $existing = $this->getResolutions($id);
+        $minWidth = 300;
+        $maxWidth = 1800;
         
-        // Count occurrences of each width
-        $widthCounts = [];
-        foreach (array_merge($existing, $newResolutions) as [$width, $height]) {
-            // Round to nearest 50 to group similar widths
-            $rounded = round($width / $this->minWidthDiff) * $this->minWidthDiff;
-            
-            if (!isset($widthCounts[$rounded])) {
-                $widthCounts[$rounded] = ['count' => 0, 'width' => $width, 'height' => $height];
+        $widths = [];
+        $ratios = [];
+        foreach (array_merge($existing, $newResolutions) as $resolution) {
+            $width = $resolution[0] ?? null;
+            $height = $resolution[1] ?? null;
+            if (!$width || !$height) {
+                continue;
             }
-            $widthCounts[$rounded]['count']++;
+            if ($width < $minWidth || $width > $maxWidth) {
+                continue;
+            }
+            $widths[] = $width;
+            $ratios[] = $height / $width;
         }
-        
-        // Sort by count (most common first), then by width (smallest first)
-        usort($widthCounts, function ($a, $b) {
-            if ($b['count'] !== $a['count']) {
-                return $b['count'] - $a['count'];
+
+        if (empty($widths)) {
+            return;
+        }
+
+        sort($widths);
+        sort($ratios);
+        $minObserved = $widths[0];
+        $maxObserved = $widths[count($widths) - 1];
+        $minObserved = max($minWidth, $minObserved);
+        $maxObserved = min($maxWidth, $maxObserved);
+
+        if ($minObserved > $maxObserved) {
+            return;
+        }
+
+        $ratioIndex = (int) floor((count($ratios) - 1) / 2);
+        $ratio = $ratios[$ratioIndex];
+        if ($ratio <= 0) {
+            return;
+        }
+
+        $final = [];
+        for ($w = $minObserved; $w <= $maxObserved; $w += $this->minWidthDiff) {
+            $h = (int) round($w * $ratio);
+            if ($h <= 0) {
+                continue;
             }
-            return $a['width'] - $b['width'];
-        });
-        
-        // Take top N resolutions
-        $topResolutions = array_slice($widthCounts, 0, $this->maxResolutions);
-        
-        // Format as array of [width, height]
-        $final = array_map(fn($r) => [$r['width'], $r['height']], $topResolutions);
+            $final[] = [$w, $h];
+        }
         
         // Sort by width ascending for srcset
         usort($final, fn($a, $b) => $a[0] - $b[0]);
@@ -167,8 +188,12 @@ class ImageManager
         return <<<JS
 (function() {
     const endpoint = {$endpointJson};
+    const MIN_WIDTH = 300;
+    const MAX_WIDTH = 1800;
+    const BUCKET_SIZE = 50;
     const PerfectImage = {
         observed: new Set(),
+        trackedImages: new Map(),
         debounceTimer: null,
         
         init: function() {
@@ -186,43 +211,58 @@ class ImageManager
             const src = img.dataset.perfectImageSrc;
             const endpointUrl = endpoint;
             
-            if (this.observed.has(id)) return;
-            this.observed.add(id);
-            
-            // Replace with tracking attributes
-            img.removeAttribute('data-perfect-image-id');
-            img.removeAttribute('data-perfect-image-src');
-            img.removeAttribute('data-perfect-image-endpoint');
-            
-            // Add onload
-            img.addEventListener('load', () => {
-                this.collectDimensions(id, src, endpointUrl, img);
-            });
-            
-            // If already loaded
-            if (img.complete) {
-                this.collectDimensions(id, src, endpointUrl, img);
+            if (this.observed.has(id)) {
+                this.trackedImages.set(id, { img, src, endpointUrl });
+                return;
             }
+            this.observed.add(id);
+            this.trackedImages.set(id, { img, src, endpointUrl });
+            
+            return;
         },
         
         collectDimensions: function(id, src, endpoint, img) {
             const width = Math.round(img.width || img.clientWidth);
             const height = Math.round(img.height || img.clientHeight);
+            const screenWidth = Math.round(
+                window.visualViewport?.width ||
+                window.innerWidth ||
+                document.documentElement.clientWidth ||
+                window.screen?.width ||
+                0
+            );
             
-            if (!this.observed.has(id + '_dims')) {
-                this.observed.add(id + '_dims');
-                PerfectImage.sendDimensions(id, src, endpoint, [[width, height]]);
-            }
+            if (!width || !height || !screenWidth) return;
+            PerfectImage.sendDimensions(id, src, endpoint, [[width, height, screenWidth]]);
+        },
+        
+        collectAllDimensions: function() {
+            this.trackedImages.forEach(({ img, src, endpointUrl }, id) => {
+                this.collectDimensions(id, src, endpointUrl, img);
+            });
         },
         
         observeResize: function() {
             window.addEventListener('resize', () => {
                 clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => {
-                    const images = document.querySelectorAll('[data-perfect-image-id]');
-                    images.forEach(img => this.trackImage(img));
-                }, 500);
+                    this.observePageLoad();
+                    this.collectAllDimensions();
+                }, 300);
             });
+        },
+        
+        hasCoverage: function(stored) {
+            const buckets = new Set();
+            stored.forEach(d => {
+                const screenWidth = d[2];
+                if (!screenWidth) return;
+                const clamped = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, screenWidth));
+                const bucket = Math.floor((clamped - MIN_WIDTH) / BUCKET_SIZE);
+                buckets.add(bucket);
+            });
+            const totalBuckets = Math.floor((MAX_WIDTH - MIN_WIDTH) / BUCKET_SIZE) + 1;
+            return buckets.size >= totalBuckets;
         },
         
         sendDimensions: function(id, src, endpoint, extraDims) {
@@ -231,20 +271,17 @@ class ImageManager
             
             // Add new dimensions
             extraDims.forEach(d => {
-                if (!stored.some(s => s[0] === d[0] && s[1] === d[1])) {
+                const screenWidth = d[2];
+                if (!screenWidth) return;
+                if (!stored.some(s => s[0] === d[0] && s[1] === d[1] && s[2] === d[2])) {
                     stored.push(d);
                 }
             });
             
-            // Keep max 20 to avoid localStorage overflow
-            if (stored.length > 20) {
-                stored.splice(0, stored.length - 20);
-            }
-            
             localStorage.setItem(key, JSON.stringify(stored));
             
             // Send to server
-            if (endpoint && stored.length >= 3) {
+            if (endpoint && (this.hasCoverage(stored) || stored.length > 40)) {
                 fetch(endpoint, {
                     method: 'POST',
                     headers: {
