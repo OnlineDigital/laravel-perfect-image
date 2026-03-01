@@ -80,7 +80,7 @@ class ImageManager
     protected function renderTracking(string $id, string $src): string
     {
         $route = route('_perfect_image_observer');
-        $js = $this->getJavaScript();
+        $js = $this->getJavaScript($route);
         
         // Store JS in session to render once
         if (!session()->has('perfect_image_js_injected')) {
@@ -89,8 +89,7 @@ class ImageManager
         }
         
         return "data-perfect-image-id=\"{$id}\" "
-             . "data-perfect-image-src=\"{$src}\" "
-             . "data-perfect-image-endpoint=\"{$route}\"";
+             . "data-perfect-image-src=\"{$src}\"";
     }
 
     /**
@@ -160,10 +159,14 @@ class ImageManager
     /**
      * Generate the JavaScript for automatic injection
      */
-    public static function getJavaScript(): string
+    public static function getJavaScript(?string $endpoint = null): string
     {
-        return <<<'JS'
+        $endpoint = $endpoint ?: route(config('perfect-image.route_name', '_perfect_image_observer'));
+        $endpointJson = json_encode($endpoint, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+
+        return <<<JS
 (function() {
+    const endpoint = {$endpointJson};
     const PerfectImage = {
         observed: new Set(),
         debounceTimer: null,
@@ -181,7 +184,7 @@ class ImageManager
         trackImage: function(img) {
             const id = img.dataset.perfectImageId;
             const src = img.dataset.perfectImageSrc;
-            const endpoint = img.dataset.perfectImageEndpoint;
+            const endpointUrl = endpoint;
             
             if (this.observed.has(id)) return;
             this.observed.add(id);
@@ -193,12 +196,12 @@ class ImageManager
             
             // Add onload
             img.addEventListener('load', () => {
-                this.collectDimensions(id, src, endpoint, img);
+                this.collectDimensions(id, src, endpointUrl, img);
             });
             
             // If already loaded
             if (img.complete) {
-                this.collectDimensions(id, src, endpoint, img);
+                this.collectDimensions(id, src, endpointUrl, img);
             }
         },
         

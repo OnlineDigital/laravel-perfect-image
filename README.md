@@ -87,13 +87,13 @@ return [
 In your Blade templates:
 
 ```blade
-<img {{ perfect_image_srcset('unique-key', $imagepath) }}>
+<img @perfect_image_srcset('unique-key', $imagepath) />
 ```
 
 Example:
 
 ```blade
-<img {{ perfect_image_srcset('hero-image', asset('images/hero.jpg')) }}>
+<img @perfect_image_srcset('hero-image', asset('images/hero.jpg')) />
 ```
 
 This generates:

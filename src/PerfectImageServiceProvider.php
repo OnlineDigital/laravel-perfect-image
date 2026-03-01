@@ -58,7 +58,7 @@ class PerfectImageServiceProvider extends ServiceProvider
             $src = $parts[1] ?? '""';
             $sizes = $parts[2] ?? 'null';
 
-            return "<?php echo \\AndreiTelteu\\PerfectImage\\PerfectImage::render({$id}, {$src}, {$sizes}); ?>";
+            return "<?php echo \\OnlineDigital\\PerfectImage\\PerfectImage::render({$id}, {$src}, {$sizes}); ?>";
         });
     }
 
