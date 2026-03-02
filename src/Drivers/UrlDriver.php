@@ -8,6 +8,10 @@ class UrlDriver implements Driver
 {
     public function generateUrl(string $url, int $width, ?int $height = null): string
     {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            return $url;
+        }
+
         $format = config('perfect-image.drivers.url.param_format', '{url}?w={width}&h={height}');
         $callback = config('perfect-image.drivers.url.url_before_callback');
         if (is_callable($callback)) {
