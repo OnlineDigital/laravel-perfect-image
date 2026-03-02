@@ -241,8 +241,19 @@ class ImageManager
         }
 
         $data[$id] = $resolutions;
+        
+        // Sort by keys to keep file stable
+        ksort($data);
 
-        file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        
+        // Compact inner arrays: [ \n 123, \n 456 \n ] -> [123,456]
+        $json = preg_replace_callback('/\[\s+([0-9, \t\r\n]+)\s+\]/s', function($matches) {
+            $content = preg_replace('/\s+/', '', $matches[1]);
+            return '[' . $content . ']';
+        }, $json);
+
+        file_put_contents($path, $json);
     }
 
     /**
