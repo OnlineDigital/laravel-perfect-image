@@ -65,6 +65,9 @@ return [
     'drivers' => [
         'url' => [
             'param_format' => '{url}?w={width}&h={height}',
+            'url_before_callback' => function ($url) {
+                return $url;
+            },
         ],
         'cloudinary' => [
             'cloud_name' => env('CLOUDINARY_CLOUD_NAME', ''),

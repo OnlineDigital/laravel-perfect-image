@@ -9,6 +9,10 @@ class UrlDriver implements Driver
     public function generateUrl(string $url, int $width, ?int $height = null): string
     {
         $format = config('perfect-image.drivers.url.param_format', '{url}?w={width}&h={height}');
+        $callback = config('perfect-image.drivers.url.url_before_callback');
+        if (is_callable($callback)) {
+            $url = $callback($url);
+        }
         
         $result = str_replace('{url}', $url, $format);
         $result = str_replace('{width}', (string) $width, $result);
