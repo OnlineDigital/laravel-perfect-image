@@ -11,13 +11,17 @@ class ImageManager
     protected Driver $driver;
     protected int $maxResolutions;
     protected int $minWidthDiff;
+    protected int $minWidth;
+    protected int $maxWidth;
     protected ?string $cspNonce = null;
 
-    public function __construct(Driver $driver, int $maxResolutions = 5, int $minWidthDiff = 50)
+    public function __construct(Driver $driver, int $maxResolutions = 5, int $minWidthDiff = 50, int $minWidth = 300, int $maxWidth = 1800)
     {
         $this->driver = $driver;
         $this->maxResolutions = $maxResolutions;
         $this->minWidthDiff = $minWidthDiff;
+        $this->minWidth = $minWidth;
+        $this->maxWidth = $maxWidth;
     }
 
     public function setCspNonce(?string $nonce): void
@@ -49,6 +53,12 @@ class ImageManager
      */
     public function getResolutions(string $id): array
     {
+        $driver = config('perfect-image.cache_driver', 'file');
+
+        if ($driver === 'storage_file') {
+            return $this->getResolutionsFromStorage($id);
+        }
+
         $cacheKey = "perfect_image_{$id}";
         return Cache::get($cacheKey, []);
     }
@@ -122,8 +132,6 @@ class ImageManager
         }
         
         $existing = $this->getResolutions($id);
-        $minWidth = 300;
-        $maxWidth = 1800;
         
         $observed = [];
         foreach (array_merge($existing, $newResolutions) as $resolution) {
@@ -132,7 +140,7 @@ class ImageManager
             if (!$width || !$height) {
                 continue;
             }
-            if ($width < $minWidth || $width > $maxWidth) {
+            if ($width < $this->minWidth || $width > $this->maxWidth) {
                 continue;
             }
             $ratio = $height / $width;
@@ -149,8 +157,8 @@ class ImageManager
         usort($observed, fn($a, $b) => $a['width'] <=> $b['width']);
         $minObserved = $observed[0]['width'];
         $maxObserved = $observed[count($observed) - 1]['width'];
-        $minObserved = max($minWidth, $minObserved);
-        $maxObserved = min($maxWidth, $maxObserved);
+        $minObserved = max($this->minWidth, $minObserved);
+        $maxObserved = min($this->maxWidth, $maxObserved);
 
         if ($minObserved > $maxObserved) {
             return;
@@ -180,8 +188,61 @@ class ImageManager
         // Sort by width ascending for srcset
         usort($final, fn($a, $b) => $a[0] - $b[0]);
         
+        $driver = config('perfect-image.cache_driver', 'file');
+
+        if ($driver === 'storage_file') {
+             $this->saveResolutionsToStorage($id, $final);
+             return;
+        }
+
         $cacheKey = "perfect_image_{$id}";
         Cache::put($cacheKey, $final, now()->addDays(30));
+    }
+
+    protected function getStoragePath(): string
+    {
+        return storage_path('app/perfect_image_resolutions.json');
+    }
+
+    protected function getResolutionsFromStorage(string $id): array
+    {
+        $path = $this->getStoragePath();
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = file_get_contents($path);
+        $data = json_decode($content, true);
+
+        if (!is_array($data)) {
+            return [];
+        }
+
+        return $data[$id] ?? [];
+    }
+
+    protected function saveResolutionsToStorage(string $id, array $resolutions): void
+    {
+        $path = $this->getStoragePath();
+        $directory = dirname($path);
+
+        if (!is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $data = [];
+        
+        if (file_exists($path)) {
+            $content = file_get_contents($path);
+            $data = json_decode($content, true);
+            if (!is_array($data)) {
+                $data = [];
+            }
+        }
+
+        $data[$id] = $resolutions;
+
+        file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
     }
 
     /**
@@ -191,12 +252,15 @@ class ImageManager
     {
         $endpoint = $endpoint ?: route(config('perfect-image.route_name', '_perfect_image_observer'));
         $endpointJson = json_encode($endpoint, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+        
+        $minWidth = config('perfect-image.min_width', 300);
+        $maxWidth = config('perfect-image.max_width', 1800);
 
         return <<<JS
 (function() {
     const endpoint = {$endpointJson};
-    const MIN_WIDTH = 300;
-    const MAX_WIDTH = 1800;
+    const MIN_WIDTH = {$minWidth};
+    const MAX_WIDTH = {$maxWidth};
     const BUCKET_SIZE = 50;
     const PerfectImage = {
         observed: new Set(),

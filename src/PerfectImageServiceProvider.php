@@ -33,7 +33,9 @@ class PerfectImageServiceProvider extends ServiceProvider
             return new ImageManager(
                 $app->make(Driver::class),
                 config('perfect-image.max_resolutions', 5),
-                config('perfect-image.min_width_diff', 50)
+                config('perfect-image.min_width_diff', 50),
+                config('perfect-image.min_width', 100),
+                config('perfect-image.max_width', 3000)
             );
         });
     }

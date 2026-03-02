@@ -7,7 +7,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | The cache driver to use for storing resolution data.
+    | Options: file, storage_file
     | Default: file
+    |
+    | If 'storage_file' is used, resolutions are stored in a JSON file
+    | at storage_path('app/perfect_image_resolutions.json').
     |
     */
     'cache_driver' => env('PERFECT_IMAGE_CACHE_DRIVER', 'file'),
@@ -32,6 +36,18 @@ return [
     |
     */
     'min_width_diff' => 50,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Resolution Limits
+    |--------------------------------------------------------------------------
+    |
+    | The minimum and maximum widths to store.
+    | Images smaller than min_width or larger than max_width will be ignored.
+    |
+    */
+    'min_width' => 100,
+    'max_width' => 3000,
 
     /*
     |--------------------------------------------------------------------------
